@@ -12,13 +12,15 @@ import type { WorkerBuildResult } from "@cloudflare/deploy-helpers";
  *
  * The output is a self-contained `.cloudflare/output/v0/` directory.
  */
-export async function runBuildOutput(buildArgs: {
+export async function runBuildOutput({
+	env,
+	isPreview = false,
+}: {
 	env?: string;
+	isPreview?: boolean;
 }): Promise<void> {
 	const { config, parsedWorkerConfig, parsedSettingsConfig, mode } =
-		await readNewConfig({
-			env: buildArgs.env,
-		});
+		await readNewConfig({ env }, { isPreview });
 	const { buildProps, assetsOptions } = await mergeBuildOutputProps(config);
 	const root = process.cwd();
 
@@ -33,6 +35,7 @@ export async function runBuildOutput(buildArgs: {
 			parsedWorkerConfig,
 			parsedSettingsConfig,
 			mode,
+			isPreview,
 			buildResult,
 			assetsOptions,
 		});
