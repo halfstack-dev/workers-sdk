@@ -2176,6 +2176,8 @@ describe("wrangler preview", () => {
 			});
 			expect(std.warn).toBe("");
 			expect(std.err).toBe("");
+			logger.info("logging restored after Preview JSON error");
+			expect(std.info).toBe("logging restored after Preview JSON error");
 		});
 
 		test.for([
@@ -3073,11 +3075,36 @@ describe("wrangler preview", () => {
 			expect(std.warn).not.toContain("ASSETS");
 		});
 
-		test("should output preview and deployment JSON with --json", async ({
+		test("should keep JSON output parseable with a redirected config and assets", async ({
 			expect,
 		}) => {
+			mkdirSync("public", { recursive: true });
+			writeFileSync("public/index.html", "<h1>Hello</h1>");
+			writeRedirectedWranglerConfig({
+				name: "test-worker",
+				main: "../src/index.ts",
+				userConfigPath: "./wrangler.json",
+				previews: {},
+				assets: { directory: "../public" },
+			});
+			const redirectedConfig = JSON.parse(
+				readFileSync("dist/wrangler.json", "utf8")
+			) as Record<string, unknown>;
+			writeFileSync(
+				"dist/wrangler.json",
+				JSON.stringify({ ...redirectedConfig, unexpected_setting: true })
+			);
+
 			const outputFile = "./output.json";
 			msw.use(
+				http.post(
+					`*/accounts/:accountId/workers/scripts/:workerId/assets-upload-session`,
+					() =>
+						HttpResponse.json({
+							success: true,
+							result: { buckets: [], jwt: "assets-jwt-from-session" },
+						})
+				),
 				http.get(
 					`*/accounts/:accountId/workers/workers/:workerId/previews/:previewId`,
 					() =>
@@ -3134,10 +3161,13 @@ describe("wrangler preview", () => {
 				WRANGLER_OUTPUT_FILE_PATH: outputFile,
 			});
 
-			expect(std.out).toContain('"preview"');
-			expect(std.out).toContain('"deployment"');
-			expect(std.out).toContain('"id": "preview-id-json"');
-			expect(std.out).toContain('"id": "deployment-id-json"');
+			expect(JSON.parse(std.out)).toMatchObject({
+				preview: { id: "preview-id-json" },
+				deployment: { id: "deployment-id-json" },
+			});
+			expect(std.info).toBe("");
+			expect(std.debug).toBe("");
+			expect(std.warn).toContain("unexpected_setting");
 
 			const outputEntries = readFileSync(outputFile, "utf8")
 				.split("\n")
@@ -3157,6 +3187,8 @@ describe("wrangler preview", () => {
 					deployment_urls: ["https://json123.test-worker.cloudflare.app"],
 				})
 			);
+			logger.info("logging restored after Preview JSON success");
+			expect(std.info).toBe("logging restored after Preview JSON success");
 		});
 
 		test("should build correctly when using a redirected config", async ({

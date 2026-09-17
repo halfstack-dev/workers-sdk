@@ -28,7 +28,7 @@ import { createCloudflareClient } from "../cfetch/internal";
 import { readConfig, readNewConfig } from "../config";
 import { confirm, prompt, select } from "../dialogs";
 import { run } from "../experimental-flags";
-import { logger } from "../logger";
+import { logger, runWithLogLevel } from "../logger";
 import { getMetricsDispatcher } from "../metrics";
 import {
 	categoriseArgs,
@@ -141,7 +141,14 @@ function createHandler(def: InternalCommandDefinition, argv: string[]) {
 	// What is left is safe to use in metrics and sentry messages as the parts of the command are taken directly from the command definition.
 	const sanitizedCommand = def.command.replace(/^wrangler\s+/, "");
 
-	return async function handler(args: HandlerArgs<NamedArgDefinitions>) {
+	return (args: HandlerArgs<NamedArgDefinitions>) => {
+		const logLevel = def.behaviour?.overrideLogLevel?.(args);
+		return logLevel === undefined
+			? handler(args)
+			: runWithLogLevel(logLevel, () => handler(args));
+	};
+
+	async function handler(args: HandlerArgs<NamedArgDefinitions>) {
 		const startTime = Date.now();
 
 		// The command definition's `command` string is safe to use in sentry messages.
@@ -431,7 +438,7 @@ function createHandler(def: InternalCommandDefinition, argv: string[]) {
 							"\n\nTo continue without logging in, rerun this command with `--temporary`. Wrangler will use a temporary account and print a claim URL.";
 					}
 
-					await handleError(err, args, argv);
+					await runWithLogLevel(undefined, () => handleError(err, args, argv));
 
 					// Wrap the error to signal that the telemetry has already been sent and the error reporting handled.
 					throw new CommandHandledError(err);
@@ -455,7 +462,7 @@ function createHandler(def: InternalCommandDefinition, argv: string[]) {
 			}
 			throw err;
 		}
-	};
+	}
 }
 
 /**
