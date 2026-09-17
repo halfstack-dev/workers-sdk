@@ -8,8 +8,12 @@ import {
 	UserError,
 } from "@cloudflare/workers-utils";
 import { shortHash, truncateWithSuffix } from "../shared/names";
-import type { Binding, EnvBindings } from "./api";
-import type { Config, PreviewsConfig } from "@cloudflare/workers-utils";
+import type { Binding, EnvBindings, UpdatePreviewRequestParams } from "./api";
+import type {
+	Config,
+	PreviewsConfig,
+	RawConfig,
+} from "@cloudflare/workers-utils";
 
 const MAX_CONTAINER_APP_NAME_LENGTH = 253;
 
@@ -654,6 +658,43 @@ export function extractConfigBindings(config: Config): EnvBindings {
 	return env;
 }
 
+export function extractBuildOutputBindings(config: RawConfig): EnvBindings {
+	// Build Output stores bindings at the top level, while Wrangler reads them from
+	// config.previews, so wrap the same shape to reuse Wrangler's mapping.
+	const env = extractConfigBindings({
+		previews: config as PreviewsConfig,
+		assets: config.assets,
+	} as Config);
+
+	// Programmatic config has binding fields that Wrangler Preview config doesn't.
+	for (const service of config.services ?? []) {
+		env[service.binding] = { ...env[service.binding], props: service.props };
+	}
+	for (const memory of config.agent_memory ?? []) {
+		env[memory.binding] = {
+			type: "agent_memory",
+			namespace: memory.namespace,
+		};
+	}
+	for (const vpc of config.vpc_networks ?? []) {
+		const binding: Binding = { type: "vpc_network" };
+		if ("tunnel_id" in vpc) {
+			binding.tunnel_id = vpc.tunnel_id;
+		} else {
+			binding.network_id = vpc.network_id;
+		}
+		env[vpc.binding] = binding;
+	}
+	for (const binding of config.logfwdr?.bindings ?? []) {
+		env[binding.name] = {
+			type: "logfwdr",
+			destination: binding.destination,
+		};
+	}
+
+	return env;
+}
+
 /**
  * Returns the DO `class_name`s this script declares, through `migrations` or
  * through `exports`, resolving them in the same order as wrangler's own
@@ -762,9 +803,11 @@ export function previewContainerAppName(
 	);
 }
 
-export function assemblePreviewScriptSettings(config: Config) {
+export function assemblePreviewScriptSettings(
+	config: Config
+): UpdatePreviewRequestParams {
 	const previews = config.previews;
-	const result: Record<string, unknown> = {};
+	const result: UpdatePreviewRequestParams = {};
 
 	const observability = previews?.observability ?? config.observability;
 	if (observability !== undefined) {
