@@ -1,5 +1,11 @@
 # @cloudflare/config
 
+## 0.15.0
+
+### Minor Changes
+
+- [#15609](https://github.com/cloudflare/workers-sdk/pull/15609) [`1f070c8`](https://github.com/cloudflare/workers-sdk/commit/1f070c8a5a0b12247071551ed58d19444a427036) Thanks [@emily-shen](https://github.com/emily-shen)! - Support Durable Object-managed Containers in `convertToWranglerConfig()`.
+
 ## 0.14.0
 
 ### Minor Changes
